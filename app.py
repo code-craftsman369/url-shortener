@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, redirect
+from flask import Flask, request, jsonify, redirect, render_template
 import sqlite3
 import string
 import random
@@ -34,14 +34,8 @@ def generate_short_code():
 @app.route('/')
 def home():
     """ホームページ"""
-    return jsonify({
-        "message": "URL短縮サービスへようこそ",
-        "endpoints":{
-            "shorten": "POST /shorten",
-            "redirect": "GET /<short_code>",
-            "stats": "GET /stats/<short_code>"
-        }
-    })
+    return render_template('index.html')
+
 
 @app.route('/shorten', methods=['POST'])
 def shorten_url():
@@ -52,7 +46,18 @@ def shorten_url():
         return jsonify({"error": "URLが必要です"}), 400
     
     original_url = data['url']
-    short_code = generate_short_code()
+
+    # カスタムコードがあればそれを使う、なければ自動生成
+    if 'custom_code' in data and data['custom_code']:
+        short_code = data['custom_code']
+
+        # カスタムコードの検証（英数字のみ、3-20文字）
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', short_code):
+            return jsonify({"error": "カスタムコードは3-20文字の英数字、ハイフン、アンダースコアのみ使用可能です"}), 400
+    else:
+        short_code = generate_short_code()
+
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # データベースに保存
@@ -66,8 +71,12 @@ def shorten_url():
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        # 短縮コードが重複した場合は再生成
-        return shorten_url()
+        conn.close()
+        if 'custom_code' in data and data['custom_code']:
+            return jsonify({"error": "このカスタムコードは既に使用されています"}), 409
+        else:
+            # ランダムコードが重複した場合は再生成
+            return shorten_url()
     finally:
         conn.close()
 
@@ -76,6 +85,7 @@ def shorten_url():
         "short_url": f"http://localhost:5003/{short_code}",
         "short_code": short_code
     })
+
 
 @app.route('/<short_code>')
 def redirect_url(short_code):
@@ -117,6 +127,22 @@ def get_stats(short_code):
             "clicks": result[2]
         })
     else:
+        return jsonify({"error": "URLが見つかりません"}), 404
+
+@app.route('/delete/<short_code>', methods=['DELETE'])
+def delete_url(short_code):
+    """短縮URLを削除"""
+    conn = sqlite3.connect('urls.db')
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM urls WHERE short_code = ?', (short_code,))
+
+    if cursor.rowcount > 0:
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "URLを削除しました"}), 200
+    else:
+        conn.close()
         return jsonify({"error": "URLが見つかりません"}), 404
 
 
