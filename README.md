@@ -1,8 +1,11 @@
 # URL Shortener
 
+![URL Shortener Screenshot](images/screenshot.png)
+
 FlaskとSQLiteを使った本格的なURL短縮サービス
 
 ## 🌟 機能
+
 
 - ✅ 長いURLを短い6文字のコードに自動変換
 - ✅ **カスタムURL対応**（好きな短縮コードを指定可能）
